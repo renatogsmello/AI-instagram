@@ -1,6 +1,8 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import requests
+from pydub import AudioSegment
 
 def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, openai):
     print('Resumindo com o gpt para um post no instagram...')
@@ -139,23 +141,102 @@ def openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, openai):
 
     return texto_para_imagem
 
+def openai_dalle_gerar_imagem(resolucao, resumo_imagem, nome_arquivo, openai, qtd_imagens):
+    print('Gerando imagem utilizando Dalle...')
+
+    prompt_user = f'Uma pintura ultra futurista, textless, 3d que retrate: {resumo_imagem}'
+
+    resposta = openai.images.generate(
+        prompt= prompt_user,
+        n = qtd_imagens,
+        size=resolucao
+    )
+
+    return resposta.data
+
+def ferramenta_download_imagem(nome_arquivo, imagem_gerada, qtd_imagens = 1):
+    lista_nome_imagens = []
+    try:
+        for contador_imagens in range(0, qtd_imagens):
+            caminho = imagem_gerada[contador_imagens].url
+            imagem = requests.get(caminho)
+            with open(f'{nome_arquivo}_{contador_imagens}.png','wb') as arquivo_imagem:
+                arquivo_imagem.write(imagem.content)
+
+            lista_nome_imagens.append(f'{nome_arquivo}_{contador_imagens}.png')
+        return lista_nome_imagens
+    except:
+        print('Ocorreu um erro')
+        return None
+
+def ferramenta_transcrever_audio_em_partes(caminho_audio, nome_arquivo):
+    print('Iniciando cortes ...')
+
+    audio = AudioSegment.from_mp3(caminho_audio)
+
+    cinco_minutos = 5 * 60 * 1000
+
+    contador_pedaco = 1
+    arquivos_exportados = []
+
+    while len(audio) > 0:
+        pedaco = audio[:cinco_minutos]
+        nome_pedaco_audio = f'{nome_arquivo}_parte_{contador_pedaco}.mp3'
+        pedaco.export(nome_pedaco_audio, format='mp3')
+        arquivos_exportados.append(nome_pedaco_audio)
+        audio = audio[cinco_minutos:]
+        contador_pedaco += 1
+
+    return arquivos_exportados
+
+def openai_whisper_transcrever_em_partes(caminho_audio, nome_arquivo,modelo_whisper, client):
+    print('Estou transcrevendo com whisper...')
+
+    lista_arquivos_audio = ferramenta_transcrever_audio_em_partes(caminho_audio, nome_arquivo)
+    lista_pedacos_audio = []
+    for um_pedaco_audio in lista_arquivos_audio:
+        audio = open(um_pedaco_audio, 'rb')
+
+        resposta = client.audio.transcriptions.create(
+            
+            model = modelo_whisper,
+            file = audio
+        )
+
+        transcricao = resposta.text
+        lista_pedacos_audio.append(transcricao)
+
+    transcricao = ''.join(lista_pedacos_audio)
+
+
+    with open(f'texto_completo_{nome_arquivo}.txt','w',encoding='utf-8') as arquivo_texto:
+        arquivo_texto.write(transcricao)
+
+    return transcricao
+
+
 def main():
     load_dotenv()
 
     caminho_audio = 'podcasts/hipsters_154_testes_short.mp3'
     nome_arquivo = 'hipsters_154_testes_short'
     url_podcast = 'https://rmwd.com.br'
+    resolucao = '1024x1024'
+    qtd_imagens = 4
 
     openai_key = os.getenv('API_OPENAI')
     openai = OpenAI(api_key=openai_key)
     
-    
+    openai.images.generate
     modelo_whisper = 'whisper-1'
-    transcricao_completa = ferramenta_ler_arquivo('texto_completo_hipsters_154_testes_short.txt')
-    resumo_instagram = ferramenta_ler_arquivo('resumo_instagram_hipsters_154_testes_short.txt')
-    hashtags = ferramenta_ler_arquivo('hastags_hipsters_154_testes_short.txt')
+    #transcricao_completa = ferramenta_ler_arquivo('texto_completo_hipsters_154_testes_short.txt')
+    transcricao_completa = openai_whisper_transcrever_em_partes(caminho_audio, nome_arquivo,modelo_whisper, openai)
+    #resumo_instagram = ferramenta_ler_arquivo('resumo_instagram_hipsters_154_testes_short.txt')
+    #hashtags = ferramenta_ler_arquivo('hastags_hipsters_154_testes_short.txt')
+    #resumo_imagem_instagram = ferramenta_ler_arquivo('resumo_instagram_hipsters_154_testes_short.txt')
 
-    resumo_imagem_instagram = openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, openai)
+    #imagem_gerada = openai_dalle_gerar_imagem(resolucao, resumo_imagem_instagram, nome_arquivo, openai,qtd_imagens)
+    #ferramenta_download_imagem(nome_arquivo, imagem_gerada, qtd_imagens)
 
 if __name__ == "__main__":
     main()
