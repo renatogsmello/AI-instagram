@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 import os
 import requests
 from pydub import AudioSegment
+from PIL import Image
+from instabot import Bot
+import shutil
 
 def openai_gpt_resumir_texto(transcricao_completa, nome_arquivo, openai):
     print('Resumindo com o gpt para um post no instagram...')
@@ -214,6 +217,36 @@ def openai_whisper_transcrever_em_partes(caminho_audio, nome_arquivo,modelo_whis
 
     return transcricao
 
+def selecionar_imagem(lista_nome_imagens):
+    return lista_nome_imagens[int(input("Qual imagem você deseja selecionar, informe o número do sufixo da imagem ? "))]
+
+def ferramenta_converter_png_para_jpeg(caminho_imagem_escolhida, nome_arquivo):
+    img_png = Image.open(caminho_imagem_escolhida)
+    img_png.save(caminho_imagem_escolhida.split('.')[0]+".jpg")
+
+    return caminho_imagem_escolhida.split(".")[0] + ".jpg"
+
+def postar_instagram(caminho_imagem, texto, user, password):
+    if os.path.exists('config'):
+        shutil.rmtree('config')
+    
+    bot = Bot()
+    bot.login(username=user, password=password)
+
+    resposta = bot.upload_photo(caminho_imagem, caption=texto)
+
+def confirmacao_postagem(caminho_imagem_convertida, legenda_postagem ):
+    print(f'\n Caminho Imagem: {caminho_imagem_convertida}')
+    print(f'\n Legenda: {legenda_postagem}')
+    
+    print("\n\nDeseja postar os dados acima no seu instagram? Digite 's' para sim e 'n' para não.")
+    return input()
+
+def ferramenta_conversao_binario_string(texto):
+    if isinstance(texto, bytes):
+       return str(texto.decode())
+    return texto
+
 
 def main():
     load_dotenv()
@@ -223,20 +256,31 @@ def main():
     url_podcast = 'https://rmwd.com.br'
     resolucao = '1024x1024'
     qtd_imagens = 4
-
+    usuario_instagram = os.getenv('USER_INSTAGRAM')
+    senha_instagram = os.getenv('PASSWORD_INSTAGRAM')
+   
     openai_key = os.getenv('API_OPENAI')
     openai = OpenAI(api_key=openai_key)
     
     openai.images.generate
     modelo_whisper = 'whisper-1'
-    #transcricao_completa = ferramenta_ler_arquivo('texto_completo_hipsters_154_testes_short.txt')
-    transcricao_completa = openai_whisper_transcrever_em_partes(caminho_audio, nome_arquivo,modelo_whisper, openai)
-    #resumo_instagram = ferramenta_ler_arquivo('resumo_instagram_hipsters_154_testes_short.txt')
-    #hashtags = ferramenta_ler_arquivo('hastags_hipsters_154_testes_short.txt')
-    #resumo_imagem_instagram = ferramenta_ler_arquivo('resumo_instagram_hipsters_154_testes_short.txt')
+    transcricao_completa = ferramenta_ler_arquivo('texto_completo_hipsters_154_testes_short.txt')
+    #transcricao_completa = openai_whisper_transcrever_em_partes(caminho_audio, nome_arquivo,modelo_whisper, openai)
+    resumo_instagram = openai_gpt_resumir_texto(str(transcricao_completa), nome_arquivo, openai)
+    hashtags = openai_gpt_criar_hashtag(resumo_instagram, nome_arquivo, openai)
+    resumo_imagem_instagram = openai_gpt_gerar_texto_imagem(resumo_instagram, nome_arquivo, openai)
 
-    #imagem_gerada = openai_dalle_gerar_imagem(resolucao, resumo_imagem_instagram, nome_arquivo, openai,qtd_imagens)
-    #ferramenta_download_imagem(nome_arquivo, imagem_gerada, qtd_imagens)
+    imagem_gerada = openai_dalle_gerar_imagem(resolucao, resumo_imagem_instagram, nome_arquivo, openai,qtd_imagens)
+    lista_imagens_geradas = ferramenta_download_imagem(nome_arquivo, imagem_gerada, qtd_imagens)
+    caminho_imagem_escolhida = selecionar_imagem(lista_imagens_geradas)
+    caminho_imagem_convertida = ferramenta_converter_png_para_jpeg(caminho_imagem_escolhida, nome_arquivo)
+
+    legenda_imagem = f'O conteúdo da postagem abaixo foi feita com Python e ferramentas da OpenAi \n {ferramenta_conversao_binario_string(resumo_instagram)} \n {ferramenta_conversao_binario_string(hashtags)}'
+
+    if confirmacao_postagem(caminho_imagem_convertida, legenda_imagem).lower()  == 's':
+        
+        postar_instagram(caminho_imagem_convertida,legenda_imagem, usuario_instagram, senha_instagram)
+
 
 if __name__ == "__main__":
     main()
